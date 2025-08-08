@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "declarationDir": "lib/types",
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "outDir": "lib",
+    "resolveJsonModule": true,
+    "skipDefaultLibCheck": true,
+    "sourceMap": true,
+    "target": "esnext"
+  },
+  "include": [ "src" ],
+  "exclude": [
+    "node_modules",
+    "lib"
+  ],
+}

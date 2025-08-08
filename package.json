@@ -1,0 +1,61 @@
+{
+  "name": "@pennockprojects/nuxtss-s3-fix",
+  "version": "0.6.0",
+  "description": "A CI tool for updating a Nuxt Static Static site on AWS S3 hosting",
+  "type": "module",
+  "main": "lib/index.cjs",
+  "exports": {
+    "import": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.esm.js"
+    },
+    "require": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.cjs"
+    }
+  },
+  "sideEffects": false,
+  "bin": {
+    "nuxtss-s3-fix": "./lib/cli.js"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:watch": "vitest --coverage"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@types/node": "^24.2.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "rollup": "^4.46.2",
+    "rollup-plugin-delete": "^3.0.1",
+    "rollup-plugin-typescript2": "^0.36.0",
+    "rollup-plugin-version-injector": "^1.3.3",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PennockProjects/nuxtss-s3-fix.git"
+  },
+  "author": {
+    "name": "John Pennock",
+    "email": "info@pennockprojects.com",
+    "url": "https://pennockprojects.com"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/PennockProjects/nuxtss-s3-fix/issues"
+  },
+  "homepage": "https://github.com/PennockProjects/nuxtss-s3-fix#readme",
+  "dependencies": {
+    "commander": "^14.0.0"
+  }
+}
