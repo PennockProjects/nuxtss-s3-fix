@@ -27,7 +27,7 @@ jobs:
         id: changeset_action
         uses: changesets/action@v1
         with:
-          publish: npm run release-package
+          publish: npm run package:publish:release
         env:
           GITHUB_TOKEN: ${{ secrets.NUXTSS_S3_FIX_GIT_CS_TOKEN }}
           NPM_TOKEN: ${{ secrets.NUXTSS_S3_FIX_NPM_CS_TOKEN }}
