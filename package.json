@@ -23,12 +23,18 @@
   ],
   "scripts": {
     "build": "rollup -c",
+    "build:watch": "rollup -c -w",
+    "package:publish:release": "npm run build && npx changeset publish",
+    "package:publish:prerelease": "npm run build && npx changeset publish --snapshot",
+    "package:version": "npx changeset version",
+    "package:changelog": "npx changeset changelog",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:coverage:watch": "vitest --coverage"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.5",
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
