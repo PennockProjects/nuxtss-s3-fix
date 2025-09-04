@@ -1,6 +1,6 @@
 {
   "name": "@pennockprojects/nuxtss-s3-fix",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A CI tool for updating a Nuxt Static Static site on AWS S3 hosting",
   "type": "module",
   "main": "lib/index.cjs",
