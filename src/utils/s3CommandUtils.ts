@@ -52,7 +52,7 @@ export function initializeReport(
   s3Bucket: string,
   s3BucketPath: string,
   sitemapPath: string,
-  options: { specificRegion?: string; removeCommands?: boolean; sitemapFile?: string }
+  options: { specificRegion?: string; sitemapFile?: string }
 ): S3Report {
   return {
     s3Bucket,
@@ -72,10 +72,11 @@ export function generateKeys(paths: string[], s3Report: S3Report): void {
   logger.debug('Generating S3 object keys from sitemap paths');
   paths.forEach((path) => {
     s3Report.paths.push(path);
-    if (path.endsWith('.html') || path.endsWith('/')) {
+    if (path.endsWith('.html')) {
       s3Report.pathsExcluded.push(path);
     } else {
-      const key = path.replace(/^\//, '');          // Remove leading slash object key
+
+      const key = path.replace(/^\/|\/$/g, '');        // Remove leading slash object key and any trailing slash
       s3Report.keysAll.push(`${key}`, `${key}.html`, `${key}/index.html`); // same, flat, index
     }
   });
