@@ -47,18 +47,18 @@ export async function downloadFromS3(bucketName, key, destinationPath) {
 
 /**
  * Fetch a file from an S3 bucket using an S3 URL
- * @param {string} s3Url - The S3 URL to parse and fetch the file from (e.g., "s3://bucket-name/key:region://region-name")
+ * @param {string} bucketUriRegion - The S3 URL to parse and fetch the file from (e.g., "s3://bucket-name/key:region://region-name")
  * @returns {Promise<string|null>} - The file content as a string, or null if an error occurs
  */
-export async function fetchFromS3(s3Url) {
-  const s3Details = parseS3Url(s3Url);
+export async function fetchFromS3(bucketUriRegion) {
+  const bucketUriDetails = parseS3Url(bucketUriRegion);
 
-  if (!s3Details) {
-    console.error(`Failed to parse S3 URL: ${s3Url}`);
+  if (!bucketUriDetails) {
+    console.error(`Failed to parse S3 URI with Region: ${bucketUriRegion}`);
     return null;
   }
 
-  const { bucketName, key, region } = s3Details;
+  const { bucketName, key, region } = bucketUriDetails;
 
   const s3Client = new S3Client(region ? { region: region } : {});
   try {
@@ -109,16 +109,16 @@ export function getKeyFromS3Url(s3Url) {
 
 /**
  * Parse an S3 URL and extract the bucket name, key, and region
- * @param {string} s3Url - The S3 URL to parse (e.g., "s3://bucket-name/key:region://region-name" or "s3://bucket-name/key")
+ * @param {string} bucketUriRegion - The S3 URI to parse (e.g., "s3://bucket-name/key:region://region-name" or "s3://bucket-name/key")
  * @returns {Object|null} - An object containing `bucketName`, `key`, and `region`, or null if the URL is invalid
  */
-export function parseS3Url(s3Url) {
-  const bucketName = getBucketNameFromS3Url(s3Url);
-  const key = getKeyFromS3Url(s3Url);
-  const region = getRegionFromS3Url(s3Url);
+export function parseS3Url(bucketUriRegion) {
+  const bucketName = getBucketNameFromS3Url(bucketUriRegion);
+  const key = getKeyFromS3Url(bucketUriRegion);
+  const region = getRegionFromS3Url(bucketUriRegion);
 
   if (!bucketName || !key) {
-    console.error(`Invalid S3 URL format: ${s3Url}`);
+    console.error(`Invalid S3 URL format: ${bucketUriRegion}`);
     return null;
   }
 

@@ -1,17 +1,17 @@
-import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command, CopyObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import logger from './logger';
 
 /**
  * Check if multiple objects exist in an S3 bucket
- * @param s3Url - The S3 URL of the bucket (e.g., "s3://bucket-name:region://region-name")
+ * @param bucketUriRegion - The S3 URL of the bucket (e.g., "s3://bucket-name:region://region-name")
  * @param keys - An array of object keys to check
  * @returns An object with the keys as properties and their existence as boolean values
  */
-export async function checkObjects(s3Url: string, keys: string[]): Promise<Record<string, boolean>> {
-  const s3Details = parseS3Url(s3Url);
+export async function checkObjects(bucketUriRegion: string, keys: string[]): Promise<Record<string, boolean>> {
+  const s3Details = parseBucketUrl(bucketUriRegion);
 
   if (!s3Details) {
-    console.error(`Failed to parse S3 URL: ${s3Url}`);
+    console.error(`Failed to parse S3 URI: ${bucketUriRegion}`);
     return keys.reduce((acc, key) => ({ ...acc, [key]: false }), {}); // Return false for all keys
   }
 
@@ -37,6 +37,66 @@ export async function checkObjects(s3Url: string, keys: string[]): Promise<Recor
   } catch (error) {
     console.error(`Error checking S3 objects existence: ${error.message}`);
     return keys.reduce((acc, key) => ({ ...acc, [key]: false }), {}); // Return false for all keys
+  }
+}
+
+/**
+ * Copy an object from one key to another within the same S3 bucket
+ * @param bucketUriRegion - The S3 URL of the bucket (e.g., "s3://bucket-name:region://region-name")
+ * @param sourceKey - The source key of the object to copy
+ * @param destinationKey - The destination key for the copied object
+ * @returns A promise that resolves when the copy operation is complete
+ */
+export async function copyS3Object(bucketUriRegion: string, sourceKey: string, destinationKey: string): Promise<void> {
+  const s3Details = parseBucketUrl(bucketUriRegion);
+
+  if (!s3Details) {
+    throw new Error(`Failed to parse S3 URL: ${bucketUriRegion}`);
+  }
+
+  const { bucketName, region } = s3Details;
+
+  const s3Client = new S3Client(region ? { region: region } : {});
+  try {
+    const command = new CopyObjectCommand({
+      Bucket: bucketName,
+      CopySource: `${bucketName}/${sourceKey}`,
+      Key: destinationKey,
+    });
+    await s3Client.send(command);
+    logger.info(`Successfully copied object from ${sourceKey} to ${destinationKey} in bucket ${bucketName}`);
+  } catch (error) {
+    logger.error(`Error copying S3 object from ${sourceKey} to ${destinationKey}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Remove an object from an S3 bucket
+ * @param bucketUriRegion - The S3 URL of the bucket (e.g., "s3://bucket-name:region://region-name")
+ * @param key - The key of the object to remove
+ * @returns A promise that resolves when the delete operation is complete
+ */
+export async function removeS3Object(bucketUriRegion: string, key: string): Promise<void> {
+  const s3Details = parseBucketUrl(bucketUriRegion);
+
+  if (!s3Details) {
+    throw new Error(`Failed to parse S3 URL: ${bucketUriRegion}`);
+  }
+
+  const { bucketName, region } = s3Details;
+
+  const s3Client = new S3Client(region ? { region: region } : {});
+  try {
+    const command = new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+    });
+    await s3Client.send(command);
+    logger.info(`Successfully removed object with key ${key} from bucket ${bucketName}`);
+  } catch (error) {
+    logger.error(`Error removing S3 object with key ${key}:`, error);
+    throw error;
   }
 }
 
@@ -72,17 +132,17 @@ export function getKeyFromS3Url(s3Url: string): string | null {
 
 /**
  * Parse an S3 URL and extract the bucket name, key, and region
- * @param s3Url - The S3 URL to parse (e.g., "s3://bucket-name/key:region://region-name" or "s3://bucket-name/key")
+ * @param bucketUriRegion - The S3 URL to parse (e.g., "s3://bucket-name/key:region://region-name" or "s3://bucket-name/key")
  * @returns An object containing `bucketName`, `key`, and `region`, or null if the URL is invalid
  */
-export function parseS3Url(s3Url: string): { bucketName: string; key: string; region: string | null } | null {
-  const bucketName = getBucketNameFromS3Url(s3Url);
-  const key = getKeyFromS3Url(s3Url);
-  const region = getRegionFromS3Url(s3Url);
-  logger.debug('parseS3Url called with:', { s3Url, bucketName, key, region });
+export function parseBucketUrl(bucketUriRegion: string): { bucketName: string; key: string; region: string | null } | null {
+  const bucketName = getBucketNameFromS3Url(bucketUriRegion);
+  const key = getKeyFromS3Url(bucketUriRegion);
+  const region = getRegionFromS3Url(bucketUriRegion);
+  logger.debug(`bucketUriRegion deconstructed: bucketName: ${bucketName}, key: ${key}, region: ${region}`);
 
   if (!bucketName) {
-    console.error(`Invalid S3 URL format: ${s3Url}`);
+    console.error(`Invalid S3 URL format: ${bucketUriRegion}`);
     return null;
   }
 

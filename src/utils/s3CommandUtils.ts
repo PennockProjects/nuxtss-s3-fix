@@ -3,68 +3,87 @@ import { checkObjects } from "./awsS3Utils";
 import logger from "./logger";
 import { S3Report } from '../types/S3Report';
 
-export async function fetchPathsFromSitemap(sitemapPath: string): Promise<string[]> {
-  logger.info(`Fetching paths from sitemap: ${sitemapPath}`);
-  logger.debug('Fetching and parsing paths from sitemap:', sitemapPath);
-  return fetchParsePaths(sitemapPath);
+export async function fetchPathsFromSitemap(sitemapFileLocator: string): Promise<string[]> {
+  logger.info(`Fetching sitemap from: ${sitemapFileLocator}`);
+  return fetchParsePaths(sitemapFileLocator);
 }
 
-export function validateS3Bucket(s3Bucket: string): void {
-  if (!s3Bucket) {
-    logger.error('S3 bucket path is required.');
-    throw new Error('S3 bucket path is required.');
+export function validateS3Bucket(bucketUri: string): void {
+  if (!bucketUri) {
+    logger.error('S3 bucket uri is required.');
+    throw new Error('S3 bucket uri is required.');
   }
-  if (!s3Bucket.startsWith('s3://')) {
-    logger.error('S3 bucket path must start with "s3://".');
-    throw new Error('S3 bucket path must start with "s3://".');
+  if (!bucketUri.startsWith('s3://')) {
+    logger.error('S3 bucket uri must start with "s3://".');
+    throw new Error('S3 bucket uri must start with "s3://".');
   }
 }
 
-export function buildSitemapPath(s3Bucket: string, sitemapFilePath?: string, specificRegion?: string): string {
-  let sitemapPath = sitemapFilePath || `${s3Bucket}/sitemap.xml`;
-  if (sitemapFilePath) {
-    if(!sitemapFilePath.endsWith('.xml')) {
-      logger.error('Sitemap file path must end with ".xml".');
-      throw new Error('Sitemap file path must end with ".xml".');
-    }
-    sitemapPath = sitemapFilePath;
-  } else if (s3Bucket) {
-    if(s3Bucket.endsWith('/')) {
-      sitemapPath = `${s3Bucket}sitemap.xml`;
+export function buildSitemapFileLocator(
+  bucketUri: string, 
+  specificSitemapFileLocator?: string, 
+  specificBucketRegion?: string,
+  options: {
+    defaultSitemapName?: string
+  } = { defaultSitemapName: 'sitemap.xml' }
+  ): string {
+  let sitemapFileLocator = ""
+  if (specificSitemapFileLocator) {
+    if(specificSitemapFileLocator.endsWith('.xml')) {
+      sitemapFileLocator = specificSitemapFileLocator;
     } else {
-      sitemapPath = `${s3Bucket}/sitemap.xml`;
+      logger.error('Sitemap file locator must end with ".xml".');
+      throw new Error('Sitemap file locator must end with ".xml".');
     }
-    if (specificRegion) {
-      sitemapPath += `:region://${specificRegion}`;
+  } else if (bucketUri) {
+    if(!bucketUri.startsWith('s3://')) {
+      logger.error('S3 bucket uri must start with "s3://".');
+      throw new Error('S3 bucket uri must start with "s3://".');
+    }
+    if(bucketUri.endsWith('.xml')) {
+      logger.error('S3 bucket uri must not include the .xml file name.');
+      throw new Error('S3 bucket uri must not include the .xml file name');
+    }
+    if(bucketUri.endsWith('/')) {
+      sitemapFileLocator = `${bucketUri}${options.defaultSitemapName}`;
+    } else {
+      sitemapFileLocator = `${bucketUri}/${options.defaultSitemapName}`;
+    }
+    if (specificBucketRegion) {
+      sitemapFileLocator += `:region://${specificBucketRegion}`;
     }
   } else {
-    logger.error('Either sitemapFilePath or s3Bucket must be provided to determine the sitemap path.');
-    throw new Error('Either sitemapFilePath or s3Bucket must be provided to determine the sitemap path.');
+    logger.error('Either bucketUri or specificSitemapFileLocator must be provided to determine the sitemap path.');
+    throw new Error('Either bucketUri or specificSitemapFileLocator must be provided to determine the sitemap path.');
   }
-  return sitemapPath;
+  return sitemapFileLocator;
 }
 
-export function buildS3BucketPath(s3Bucket: string, specificRegion?: string): string {
-  return specificRegion ? `${s3Bucket}:region://${specificRegion}` : s3Bucket;
+export function buildBucketUriRegionString(bucketUri: string, bucketRegion?: string): string {
+  return bucketRegion ? `${bucketUri}:region://${bucketRegion}` : bucketUri;
 }
 
 export function initializeReport(
-  s3Bucket: string,
-  s3BucketPath: string,
-  sitemapPath: string,
-  options: { specificRegion?: string; sitemapFile?: string }
+  bucketUri: string,
+  bucketUriRegion: string,
+  sitemapFileLocation: string,
 ): S3Report {
   return {
-    s3Bucket,
-    s3BucketPath,
-    sitemapPath,
-    options,
+    bucketUri: bucketUri,
+    bucketUriRegion: bucketUriRegion,
+    sitemapFileLocator: sitemapFileLocation,
     paths: [],
     pathsExcluded: [],
     keysAll: [],
     keysStatus: {},
-    validS3Commands: [],
-    skippedS3Commands: [],
+    s3CopyFlats: 0,
+    s3CopyIndexes: 0,
+    s3CopyCommands: [],
+    s3RemoveFlats: 0,
+    s3RemoveIndexes: 0,
+    s3RemoveCommands: [],
+    s3CopyCommandsSkipped: [],
+    s3RemoveCommandsSkipped: [],
   };
 }
 
@@ -81,21 +100,54 @@ export function generateKeys(paths: string[], s3Report: S3Report): void {
     }
   });
   if(s3Report.pathsExcluded.length > 0) {
-    logger.info(`Paths excluded in generating S3 object keys: ${s3Report.pathsExcluded.length}`);
-    logger.debug('Paths excluded:', s3Report.pathsExcluded);
+    logger.info(`Sitemap paths used: ${s3Report.paths.length - s3Report.pathsExcluded.length} excluded: ${s3Report.pathsExcluded.length}`);
+    logger.debug('Sitemap paths excluded, ', s3Report.pathsExcluded);
   }
-  logger.info(`Generated S3 object keys: ${s3Report.keysAll.length}`);
-  logger.debug('Result ==> Generated S3 object keys:', {
-    totalPaths: s3Report.paths.length,
-    totalPathsExcluded: s3Report.pathsExcluded.length,
-    totalKeys: s3Report.keysAll.length,
-  });
 }
 
-export async function checkS3Objects(s3BucketPath: string, allKeys: string[]): Promise<Record<string, boolean>> {
-  logger.info(`Checking S3 objects keys: ${allKeys.length}`);
-  return checkObjects(s3BucketPath, allKeys);
+export async function checkS3Objects(bucketUriRegion: string, allKeys: string[]): Promise<Record<string, boolean>> {
+  logger.debug(`Checking S3 objects keys (3 for each path): ${allKeys.length}`);
+  return checkObjects(bucketUriRegion, allKeys);
 }
 
+/**
+ * Generate S3 bucket keys based on the sitemap paths.
+ * @param bucketUri - The S3 bucket uri.
+ * @param options - Options for specific region and sitemap file.
+ * @returns A partially initialized S3Report with generated keys.
+ */
+export async function createS3KeysFromSitemap(
+  bucketUri: string,
+  options: {
+    specificRegion?: string;
+    sitemapFile?: string;
+  }
+): Promise<S3Report> {
+  validateS3Bucket(bucketUri);
 
+  const { specificRegion, sitemapFile } = options;
+  const sitemapPath = buildSitemapFileLocator(bucketUri, sitemapFile, specificRegion);
+  const bucketUriRegion = buildBucketUriRegionString(bucketUri, specificRegion);
 
+  const s3Report: S3Report = initializeReport(bucketUri, bucketUriRegion, sitemapPath);
+
+  try {
+    const paths = await fetchPathsFromSitemap(sitemapPath);
+    if (paths.length === 0) {
+      logger.warn(`No paths found in the sitemap at ${sitemapPath}`);
+      return s3Report;
+    }
+    logger.info(`Sitemap paths found total: ${paths.length}`);
+    logger.debug('Sitemap paths found', paths);
+
+    generateKeys(paths, s3Report);
+    if (s3Report.keysAll.length === 0) {
+      logger.info('No valid paths found in the sitemap for S3 objects keys.');
+    }
+
+    return s3Report;
+  } catch (error) {
+    logger.error('Error generating S3 report keys:', error);
+    throw error;
+  }
+}
