@@ -1,5 +1,15 @@
 # @pennockprojects/nuxtss-s3-fix
 
+## 0.8.0
+
+### Minor Changes
+
+- ee56b28: Extensive command line refactoring, has a separate copy command, remove command, copy execute, and remove execute paradigm
+
+### Patch Changes
+
+- a9dfcbd: Readme update
+
 ## 0.7.1
 
 ### Patch Changes
