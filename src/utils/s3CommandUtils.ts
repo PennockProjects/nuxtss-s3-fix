@@ -90,13 +90,16 @@ export function initializeReport(
 export function generateKeys(paths: string[], s3Report: S3Report): void {
   logger.debug('Generating S3 object keys from sitemap paths');
   paths.forEach((path) => {
-    s3Report.paths.push(path);
-    if (path.endsWith('.html')) {
-      s3Report.pathsExcluded.push(path);
+    if(path) {
+      s3Report.paths.push(path);
+      if (!path || path.endsWith('.html') || path.endsWith('/') || path === '') {
+        s3Report.pathsExcluded.push(path);
+      } else {
+        const key = path.replace(/^\//, '');          // Remove leading slash object key
+        s3Report.keysAll.push(`${key}`, `${key}.html`, `${key}/index.html`); // same, flat, index
+      }
     } else {
-
-      const key = path.replace(/^\/|\/$/g, '');        // Remove leading slash object key and any trailing slash
-      s3Report.keysAll.push(`${key}`, `${key}.html`, `${key}/index.html`); // same, flat, index
+      logger.error(`Excluding invalid sitemap path from paths and S3 object key generation: "${path}"`);
     }
   });
   if(s3Report.pathsExcluded.length > 0) {
