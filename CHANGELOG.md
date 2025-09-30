@@ -1,5 +1,11 @@
 # @pennockprojects/nuxtss-s3-fix
 
+## 0.9.0
+
+### Minor Changes
+
+- 061ccb3: improved test cases and generateKeys function
+
 ## 0.8.0
 
 ### Minor Changes
