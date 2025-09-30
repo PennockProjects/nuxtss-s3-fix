@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   fetchPathsFromSitemap,
   validateS3Bucket,
-  buildSitemapPath,
-  buildS3BucketPath,
+  buildSitemapFileLocator,
+  buildBucketUriRegionString,
   initializeReport,
   generateKeys,
   checkS3Objects,
@@ -32,8 +32,8 @@ describe('s3CommandUtils', () => {
 
   describe('validateS3Bucket', () => {
     it('should throw an error if the S3 bucket is invalid', () => {
-      expect(() => validateS3Bucket('')).toThrow('S3 bucket path is required.');
-      expect(() => validateS3Bucket('invalid-path')).toThrow('S3 bucket path must start with "s3://".');
+      expect(() => validateS3Bucket('')).toThrow('S3 bucket uri is required.');
+      expect(() => validateS3Bucket('invalid-path')).toThrow('S3 bucket uri must start with "s3://".');
     });
 
     it('should not throw an error for a valid S3 bucket', () => {
@@ -41,48 +41,53 @@ describe('s3CommandUtils', () => {
     });
   });
 
-  describe('buildSitemapPath', () => {
+  describe('buildSitemapFileLocator', () => {
     it('should build the correct sitemap path', () => {
-      expect(buildSitemapPath('s3://bucket', undefined, 'us-west-2')).toBe('s3://bucket/sitemap.xml:region://us-west-2');
-      expect(buildSitemapPath('s3://bucket', 'custom-sitemap.xml')).toBe('custom-sitemap.xml');
+      expect(buildSitemapFileLocator('s3://bucket', undefined, 'us-west-2')).toBe('s3://bucket/sitemap.xml:region://us-west-2');
+      expect(buildSitemapFileLocator('s3://bucket', 'custom-sitemap.xml')).toBe('custom-sitemap.xml');
     });
 
     it('should throw an error if the sitemap file path does not end with ".xml"', () => {
-      expect(() => buildSitemapPath('s3://bucket', 'invalid-sitemap')).toThrow('Sitemap file path must end with ".xml".');
+      expect(() => buildSitemapFileLocator('s3://bucket', 'invalid-sitemap')).toThrow('Sitemap file locator must end with ".xml".');
     });
   });
 
-  describe('buildS3BucketPath', () => {
+  describe('buildBucketUriRegionString', () => {
     it('should build the correct S3 bucket path with a region', () => {
-      expect(buildS3BucketPath('s3://bucket', 'us-west-2')).toBe('s3://bucket:region://us-west-2');
+      expect(buildBucketUriRegionString('s3://bucket', 'us-west-2')).toBe('s3://bucket:region://us-west-2');
     });
 
     it('should return the S3 bucket path without a region', () => {
-      expect(buildS3BucketPath('s3://bucket')).toBe('s3://bucket');
+      expect(buildBucketUriRegionString('s3://bucket')).toBe('s3://bucket');
     });
   });
 
   describe('initializeReport', () => {
     it('should initialize an S3Report object', () => {
-      const report = initializeReport('s3://bucket', 's3://bucket', 's3://bucket/sitemap.xml', { specificRegion: '::/specific_region' });
+      const report = initializeReport('s3://bucket', 'region:string', './test./sitemap.xml' );
       expect(report).toEqual({
-        s3Bucket: 's3://bucket',
-        s3BucketPath: 's3://bucket',
-        sitemapPath: 's3://bucket/sitemap.xml',
-        options: { specificRegion: '::/specific_region' },
+        bucketUri: 's3://bucket',
+        bucketUriRegion: 'region:string',
+        sitemapFileLocator: './test./sitemap.xml',
         paths: [],
         pathsExcluded: [],
         keysAll: [],
         keysStatus: {},
-        validS3Commands: [],
-        skippedS3Commands: [],
+        s3CopyFlats: 0,
+        s3CopyIndexes: 0,
+        s3CopyCommands: [],
+        s3RemoveFlats: 0,
+        s3RemoveIndexes: 0,
+        s3RemoveCommands: [],
+        s3CopyCommandsSkipped: [],
+        s3RemoveCommandsSkipped: [],
       });
     });
   });
 
   describe('generateKeys', () => {
     it('should generate keys from paths', () => {
-      const report: S3Report = initializeReport('s3://bucket', 's3://bucket', 's3://bucket/sitemap.xml', {});
+      const report: S3Report = initializeReport('s3://bucket', 's3://bucket', 's3://bucket/sitemap.xml');
       generateKeys(['/path1', '/path/to2/', '/path3.html'], report);
       expect(report.keysAll).toEqual([
         'path1',
