@@ -88,7 +88,8 @@ describe('s3CommandUtils', () => {
   describe('generateKeys', () => {
     it('should generate keys from paths', () => {
       const report: S3Report = initializeReport('s3://bucket', 's3://bucket', 's3://bucket/sitemap.xml');
-      generateKeys(['/path1', '/path/to2/', '/path3.html'], report);
+      generateKeys(['/path1', '/path/to2', '/path3.html', '', '/'], report);
+      expect(report.paths).toEqual(['/path1', '/path/to2', '/path3.html', '/']);
       expect(report.keysAll).toEqual([
         'path1',
         'path1.html',
@@ -97,7 +98,7 @@ describe('s3CommandUtils', () => {
         'path/to2.html',
         'path/to2/index.html',
       ]);
-      expect(report.pathsExcluded).toEqual(['/path3.html']);
+      expect(report.pathsExcluded).toEqual(['/path3.html', '/']);
     });
   });
 
