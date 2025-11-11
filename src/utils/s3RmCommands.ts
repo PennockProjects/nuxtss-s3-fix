@@ -1,8 +1,8 @@
-import { checkS3Objects, createS3KeysFromSitemap } from "./s3CommandUtils";
+import { checkS3Objects, createS3KeysFromSitemap, keysToLayoutString } from "./s3CommandUtils";
 import { removeS3Object } from "./awsS3Utils";
 import logger from "./logger";
 import { S3Report } from '../types/S3Report';
-import { S3Command, S3CommandStatus, S3Layout } from "../types/S3Command";
+import { S3Command, S3CommandStatus, S3Layout, S3CommandType } from "../types/S3Command";
 
 /**
  * Process the S3 report by checking object existence and creating remove actions.
@@ -22,81 +22,119 @@ export async function processKeysRmActions(s3Report: S3Report): Promise<S3Report
   }
 }
 
-function createRmActions(objectKeysFound: Record<string, boolean>, s3Report: S3Report): void {
+export function createRmActions(objectKeysFound: Record<string, boolean>, s3Report: S3Report): void {
   // Filter paths based on existence in S3
   s3Report.keysStatus = objectKeysFound;
+  logger.debug('Result S3 object keys status:', s3Report.keysStatus);
 
-  for (let i = 0; i < s3Report.keysAll.length; i = i + 3) {
-    const sameAsDirKey = s3Report.keysAll[i];     // sameAsDir
-    const flatHTMLKey = s3Report.keysAll[i + 1];  // flat
-    const indexHTMLKey = s3Report.keysAll[i + 2]; // index
+  const isTargetDouble = s3Report.s3PathLayoutNew === S3Layout.DOUBLE;
+  const isTargetSingle = s3Report.s3PathLayoutNew === S3Layout.SINGLE;
 
-    const command: S3Command = {
-      command: '',
-      commandType: "rm",
-      commandStatus: S3CommandStatus.NOT_CHECKED,
-      targetKey: '',
-      targetLayout: S3Layout.UNKNOWN,
-      isTarget: false,
-      sourceKey: '',
-      sourceLayout: S3Layout.UNKNOWN,
-      isSource: false
-    };
+  if(!isTargetSingle && !isTargetDouble) {
+    logger.warn(`Unsupported target layout ${s3Report.s3PathLayoutNew}, not examining for remove actions.`);
+    return;
+  } else {  
+    for (let i = 0; i < s3Report.keysAll.length; i = i + 3) {
+      const sameHTMLKey = s3Report.keysAll[i];
+      const flatHTMLKey = s3Report.keysAll[i + 1];
+      const indexHTMLKey = s3Report.keysAll[i + 2];
 
-    if (sameAsDirKey === undefined || flatHTMLKey === undefined || indexHTMLKey === undefined) {
-      logger.error(`Error remove keys at index ${i}:`, { sameAsDirKey, flatHTMLKey, indexHTMLKey });
-      command.commandStatus = S3CommandStatus.ERROR_KEYS_UNDEFINED;
-    } else if (!sameAsDirKey || !objectKeysFound[sameAsDirKey]) {
-      command.commandStatus = S3CommandStatus.NO_SOURCE;
-    } else {
-      command.sourceKey = sameAsDirKey;
-      command.sourceLayout = S3Layout.SAME_AS_DIRECTORY;
-      command.isSource = true;
+      const rmFlatKeyCmd: S3Command = {
+        command: '',
+        commandType: S3CommandType.REMOVE,
+        commandStatus: S3CommandStatus.NOT_CHECKED,
+        targetKey: flatHTMLKey,
+        targetLayout: S3Layout.UNKNOWN,
+        isTarget: false,
+        sourceKey: sameHTMLKey,
+        sourceLayout: S3Layout.UNKNOWN,
+        isSource: false
+      };
 
-      if (!objectKeysFound[flatHTMLKey] && !objectKeysFound[indexHTMLKey]) {
-        logger.debug(`Target keys not found:\n\t flat: ${flatHTMLKey} or \n\t index: ${indexHTMLKey} - skipping`);
-        command.commandStatus = S3CommandStatus.NO_TARGET;
-      } else if (objectKeysFound[flatHTMLKey] && objectKeysFound[indexHTMLKey]) {
-        logger.warn(`Duplicate target found flat: ${flatHTMLKey} and index: ${indexHTMLKey} for target: ${sameAsDirKey} skipping`);
-        command.commandStatus = S3CommandStatus.DUPLICATE_TARGETS;
-        command.sourceLayout = S3Layout.UNKNOWN;
-        command.isSource = false;
+      const rmIndexKeyCmd: S3Command = {
+        command: '',
+        commandType: S3CommandType.REMOVE,
+        commandStatus: S3CommandStatus.NOT_CHECKED,
+        targetKey: indexHTMLKey,
+        targetLayout: S3Layout.UNKNOWN,
+        isTarget: false,
+        sourceKey: sameHTMLKey,
+        sourceLayout: S3Layout.UNKNOWN,
+        isSource: false
+      };
+
+
+      if (sameHTMLKey == undefined || flatHTMLKey == undefined || indexHTMLKey == undefined) {
+        logger.error(`Error processing remove keys (index ${i}):`, { sameKey: sameHTMLKey, flatKey: flatHTMLKey, indexKey: indexHTMLKey });
+        rmFlatKeyCmd.commandStatus = S3CommandStatus.ERROR_KEYS_UNDEFINED;
+        s3Report.s3RemoveKeysSkipped.push(rmFlatKeyCmd);
       } else {
-        if (objectKeysFound[sameAsDirKey]) {
-          if (objectKeysFound[flatHTMLKey] && !objectKeysFound[indexHTMLKey]) {
-            command.sourceLayout = S3Layout.SAME_AND_FLAT;
-            command.targetKey = flatHTMLKey;
-            command.targetLayout = S3Layout.SAME_AS_DIRECTORY;
-            command.isTarget = true;
-            command.commandStatus = S3CommandStatus.GENERATED;
-            command.command = `aws s3 rm ${s3Report.bucketUriRegion}/${flatHTMLKey}`;
-            s3Report.s3RemoveFlats++;
-          } else if (objectKeysFound[indexHTMLKey] && !objectKeysFound[flatHTMLKey]) {
-            command.sourceLayout = S3Layout.SAME_AND_INDEX;
-            command.targetKey = indexHTMLKey;
-            command.targetLayout = S3Layout.SAME_AS_DIRECTORY;
-            command.isTarget = true;
-            command.commandStatus = S3CommandStatus.GENERATED;
-            command.command = `aws s3 rm ${s3Report.bucketUriRegion}/${indexHTMLKey}`;
-            s3Report.s3RemoveIndexes++;
-          } else {
-            // catch all error
-            command.commandStatus = S3CommandStatus.ERROR;
-            logger.error(`Error UNKNOWN processing keys at index ${i}: ${sameAsDirKey}: ${objectKeysFound[sameAsDirKey]}, ${flatHTMLKey}: ${objectKeysFound[flatHTMLKey]} ${indexHTMLKey}: ${objectKeysFound[indexHTMLKey]}`, 'skipping');
-          }
-        } else {
-          logger.warn(`Source key not found in S3: ${sameAsDirKey} skipping`);
-          command.commandStatus = S3CommandStatus.SKIPPED;
-          command.sourceLayout = S3Layout.UNKNOWN;
-          command.isSource = false;
-        }
-      } 
-    }
+        let isFlatKey = objectKeysFound[flatHTMLKey];
+        let isIndexKey = objectKeysFound[indexHTMLKey];
+        let isSameKey = objectKeysFound[sameHTMLKey];
+        let postMessage = "";
 
-    if (command.commandStatus === S3CommandStatus.GENERATED) {
-      s3Report.s3RemoveCommands.push(command);
-    } else {
-      s3Report.s3RemoveCommandsSkipped.push(command);
+        if (!isSameKey) {
+            let targetKeys = "";
+            if(isIndexKey && isFlatKey) {
+              targetKeys = "FLAT and INDEX keys";
+            } else if(isFlatKey) {
+              targetKeys = "FLAT key";
+            } else if(isIndexKey) {
+              targetKeys = "INDEX key";
+            } else {
+              targetKeys = "error: no target keys";
+            }
+
+            if(isFlatKey) {
+              rmFlatKeyCmd.commandStatus = S3CommandStatus.NO_SOURCE;
+              rmFlatKeyCmd.isSource = false;
+              s3Report.s3RemoveKeysSkipped.push(rmFlatKeyCmd);
+            }
+            if(isIndexKey && isTargetSingle) {
+              rmIndexKeyCmd.commandStatus = S3CommandStatus.NO_SOURCE;
+              rmIndexKeyCmd.isSource = false;
+              s3Report.s3RemoveKeysSkipped.push(rmIndexKeyCmd);
+            }
+            postMessage = `SAME key not found. For safety not removing ${targetKeys}.`;
+        } else {
+          rmFlatKeyCmd.isSource = true;
+          rmIndexKeyCmd.isSource = true;
+
+          // if flat key exists remove flat key
+          if(isFlatKey) {
+            rmFlatKeyCmd.isTarget = true;
+            rmFlatKeyCmd.sourceLayout = S3Layout.MIXED;
+            rmFlatKeyCmd.commandStatus = S3CommandStatus.GENERATED;
+            rmFlatKeyCmd.command = `aws s3 rm ${s3Report.bucketUriRegion}/${flatHTMLKey}`;
+            s3Report.s3RemoveCommands.push(rmFlatKeyCmd);
+            postMessage += `FLAT key '${flatHTMLKey}' can be removed. `;
+          }
+
+          // if target is single and index exists, remove index too
+          if(isIndexKey && isTargetSingle) {
+            rmIndexKeyCmd.isTarget = true;
+            rmIndexKeyCmd.sourceLayout = S3Layout.MIXED;
+            rmIndexKeyCmd.commandStatus = S3CommandStatus.GENERATED;
+            rmIndexKeyCmd.command = `aws s3 rm ${s3Report.bucketUriRegion}/${indexHTMLKey}`;
+            s3Report.s3RemoveCommands.push(rmIndexKeyCmd);
+            postMessage += `INDEX key '${indexHTMLKey}' can be removed. `;
+          }
+
+          if(isIndexKey && isTargetDouble) {
+            postMessage += `already in DOUBLE layout. skipping `;
+            rmIndexKeyCmd.commandStatus = S3CommandStatus.LAYOUT_OPTIMIZED;
+            s3Report.s3RemoveKeysSkipped.push(rmIndexKeyCmd);
+          }
+
+          if(rmIndexKeyCmd.commandStatus !== S3CommandStatus.GENERATED && rmFlatKeyCmd.commandStatus !== S3CommandStatus.GENERATED && isTargetSingle) {
+            postMessage += `already in SINGLE layout. skipping `;
+            rmFlatKeyCmd.commandStatus = S3CommandStatus.LAYOUT_OPTIMIZED;
+            s3Report.s3RemoveKeysSkipped.push(rmFlatKeyCmd);
+          }
+        }
+        logger.debug(`${sameHTMLKey} ${keysToLayoutString(isSameKey, isFlatKey, isIndexKey).toUpperCase()} layout. ${postMessage}`);
+      }
     }
   }
 }

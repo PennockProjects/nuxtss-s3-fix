@@ -3,87 +3,119 @@ class Logger {
     if (Logger.instance) {
       return Logger.instance; // Return existing instance if already created
     }
-      this.logLevel = logLevel;
-      this.levels = {
-          debug: 0,
-          info: 1,
-          result: 2,
-          warn: 3,
-          error: 4
-      };
-      this.altLevelsNames = {
-        log: 'debug',
-        quiet: 'result'
-      }
-      Logger.instance = this; // Store the new instance
+    this.levels = {
+        debug: 0,
+        info: 1,
+        log: 2,
+        warn: 3,
+        error: 4
+    };
+    this.logLevels = [
+      "debug",
+      "info",
+      "log",
+      "warn",
+      "error"
+    ];
+    this.altLevelNames = {
+      verbose: 'debug',
+      quiet: 'log'
+    }
+    if (!this.isValidLevel(logLevel)) {
+      throw new Error(`Invalid log level: ${logLevel}`);
+    }
+    this.logLevel = logLevel;
+    this.originalLogLevel = null;
+    Logger.instance = this; // Store the new instance
   }
 
-  setLogLevel(level) {
-    if (typeof level !== 'string') {
+  getLogLevel() {
+    return this.logLevel;
+  }
+
+  setLogLevel(logLevel) {
+    if (typeof logLevel !== 'string') {
       throw new Error('Log level must be a string');
     }
-    const normalLevel = this.translateAltLevel(level)
+    const normalLevel = this.translateAltLevel(logLevel)
     if(!this.isValidLevel(normalLevel)) {
-      throw new Error(`setLogLevel: Invalid log level: ${level}`);
+      throw new Error(`setLogLevel: Invalid log level: ${logLevel}`);
     }
     this.logLevel = normalLevel;
   }
 
-  setDebug(isDebug) {
-    if (isDebug) {
-      this.setLogLevel('debug');
-      this.debug('Debug mode is enabled');
-    } else {
-      this.debug('Debug mode is disabled');
-      this.setLogLevel('info'); // Default to info if not debug
+  setTempLogLevel(tempLogLevel) {
+    let isTempLevel = false;
+    if (tempLogLevel && tempLogLevel !== this.logLevel) {
+      this.originalLogLevel = this.logLevel;
+      this.setLogLevel(tempLogLevel)
+      if(this.logLevel === this.originalLogLevel) {
+        this.originalLogLevel = null;
+      } else {
+        isTempLevel = true;
+      }
+    }
+    return isTempLevel;
+  }
+
+  resetLogLevel() {
+    if (this.originalLogLevel) {
+      this.setLogLevel(this.originalLogLevel);
+      this.originalLogLevel = null;
     }
   }
 
-  isValidLevel(level) {
-    return this.levels[level] !== undefined;
+  setDebug(isDebug) {
+    if (isDebug) {
+      this.setLogLevel(this.logLevels[this.levels.debug]);
+      this.debug('Debug mode is enabled');
+    } else {
+      this.debug('Debug mode is disabled');
+      this.setLogLevel(this.logLevels[this.levels.info]); // Default to info if not debug
+    }
   }
 
-  translateAltLevel(level) {
-    return this.altLevelsNames[level] || level;
+  isValidLevel(logLevel) {
+    return this.levels[logLevel] !== undefined;
   }
 
-  shouldLog(level) {
-    return level = (level == this.levels.error) || (this.levels[level] >= this.levels[this.logLevel]);
+  translateAltLevel(logLevel) {
+    return this.altLevelNames[logLevel] || logLevel;
   }
 
-  _log(level, ...args) {
-      if (this.shouldLog(level)) {
-          if(level === 'result') {
+  shouldLog(logLevel) {
+    return logLevel = (this.levels[logLevel] == this.levels.error) || (this.levels[logLevel] >= this.levels[this.logLevel]);
+  }
+
+  _log(logLevel, ...args) {
+      if (this.shouldLog(logLevel)) {
+          if(logLevel === this.logLevels[this.levels.log]) {
             console.log(...args);
           } else {
-            const prefix = `[${level.toUpperCase()}]`;
-            console[level](prefix, ...args);
+            const prefix = `[${logLevel.toUpperCase()}]`;
+            console[logLevel](prefix, ...args);
           }
       }
   }
 
   debug(...args) {
-      this._log('debug', ...args);
-  }
-
-  log(...args) {
-      this._log('info', ...args);
+      this._log(this.logLevels[this.levels.debug], ...args);
   }
 
   info(...args) {
-      this._log('info', ...args);
+      this._log(this.logLevels[this.levels.info], ...args);
   }
 
-  result(...args) {
-      this._log('result', ...args);
+  log(...args) {
+      this._log(this.logLevels[this.levels.log], ...args);
   }
 
   warn(...args) {
-      this._log('warn', ...args);
+      this._log(this.logLevels[this.levels.warn], ...args);
   }
 
   error(...args) {
-      this._log('error', ...args);
+      this._log(this.logLevels[this.levels.error], ...args);
   }
 }
 
