@@ -2,10 +2,13 @@ import { fetchParsePaths } from "@pennockprojects/sitemap-diff";
 import { checkObjects } from "./awsS3Utils";
 import logger from "./logger";
 import { S3Report } from '../types/S3Report';
+import { S3Layout } from "../types/S3Command";
 
-export async function fetchPathsFromSitemap(sitemapFileLocator: string): Promise<string[]> {
+export async function fetchPathsFromSitemap(
+  sitemapFileLocator: string,
+): Promise<string[]> {
   logger.info(`Fetching sitemap from: ${sitemapFileLocator}`);
-  return fetchParsePaths(sitemapFileLocator);
+  return fetchParsePaths(sitemapFileLocator, {logLevel: logger.getLogLevel()});
 }
 
 export function validateS3Bucket(bucketUri: string): void {
@@ -63,27 +66,33 @@ export function buildBucketUriRegionString(bucketUri: string, bucketRegion?: str
   return bucketRegion ? `${bucketUri}:region://${bucketRegion}` : bucketUri;
 }
 
-export function initializeReport(
-  bucketUri: string,
-  bucketUriRegion: string,
-  sitemapFileLocation: string,
-): S3Report {
+export function initializeReport({
+  bucketUri,
+  bucketUriRegion,
+  isExecute = false,
+  sitemapFileLocator,
+  s3PathLayoutNew = S3Layout.UNKNOWN,
+}: {
+  bucketUri: string;
+  bucketUriRegion: string;
+  isExecute?: boolean;
+  sitemapFileLocator: string;
+  s3PathLayoutNew?: S3Layout;
+}): S3Report {
   return {
-    bucketUri: bucketUri,
-    bucketUriRegion: bucketUriRegion,
-    sitemapFileLocator: sitemapFileLocation,
+    bucketUri,
+    bucketUriRegion,
+    sitemapFileLocator,
+    s3PathLayoutNew,
+    isExecute,
     paths: [],
     pathsExcluded: [],
     keysAll: [],
     keysStatus: {},
-    s3CopyFlats: 0,
-    s3CopyIndexes: 0,
     s3CopyCommands: [],
-    s3RemoveFlats: 0,
-    s3RemoveIndexes: 0,
     s3RemoveCommands: [],
     s3CopyCommandsSkipped: [],
-    s3RemoveCommandsSkipped: [],
+    s3RemoveKeysSkipped: [],
   };
 }
 
@@ -91,10 +100,10 @@ export function generateKeys(paths: string[], s3Report: S3Report): void {
   logger.debug('Generating S3 object keys from sitemap paths');
   paths.forEach((path) => {
     if(path) {
-      s3Report.paths.push(path);
-      if (!path || path.endsWith('.html') || path.endsWith('/') || path === '') {
+      if (!path || path.endsWith('.html') || path.endsWith('/')) {
         s3Report.pathsExcluded.push(path);
       } else {
+        s3Report.paths.push(path);
         const key = path.replace(/^\//, '');          // Remove leading slash object key
         s3Report.keysAll.push(`${key}`, `${key}.html`, `${key}/index.html`); // same, flat, index
       }
@@ -103,10 +112,28 @@ export function generateKeys(paths: string[], s3Report: S3Report): void {
     }
   });
   if(s3Report.pathsExcluded.length > 0) {
-    logger.info(`Sitemap paths used: ${s3Report.paths.length - s3Report.pathsExcluded.length} excluded: ${s3Report.pathsExcluded.length}`);
+    logger.info(`Sitemap paths used: ${s3Report.paths.length} excluded: ${s3Report.pathsExcluded.length}`);
     logger.debug('Sitemap paths excluded, ', s3Report.pathsExcluded);
   }
 }
+
+export function keysToLayoutString(isSameKeyKey, isFlatKey, isIndexKey): string {
+  if (isSameKeyKey) {
+    if(isIndexKey) return S3Layout.DOUBLE;
+    else if(isFlatKey) return S3Layout.MIXED;
+    else return S3Layout.SINGLE;
+  }
+  if (isFlatKey) {
+    if (!isIndexKey && !isSameKeyKey) return S3Layout.FLAT;
+    else return S3Layout.MIXED;
+  }
+  if (isIndexKey) {
+    if(!isSameKeyKey && !isFlatKey) return S3Layout.INDEX;
+    else return S3Layout.MIXED;
+  }
+  return S3Layout.UNKNOWN;
+}
+
 
 export async function checkS3Objects(bucketUriRegion: string, allKeys: string[]): Promise<Record<string, boolean>> {
   logger.debug(`Checking S3 objects keys (3 for each path): ${allKeys.length}`);
@@ -122,6 +149,7 @@ export async function checkS3Objects(bucketUriRegion: string, allKeys: string[])
 export async function createS3KeysFromSitemap(
   bucketUri: string,
   options: {
+    isExecute?: boolean;
     specificRegion?: string;
     sitemapFile?: string;
   }
@@ -132,7 +160,12 @@ export async function createS3KeysFromSitemap(
   const sitemapPath = buildSitemapFileLocator(bucketUri, sitemapFile, specificRegion);
   const bucketUriRegion = buildBucketUriRegionString(bucketUri, specificRegion);
 
-  const s3Report: S3Report = initializeReport(bucketUri, bucketUriRegion, sitemapPath);
+  const s3Report: S3Report = initializeReport({
+    bucketUri,
+    bucketUriRegion,
+    sitemapFileLocator: sitemapPath,
+    isExecute: options.isExecute || false,
+  });
 
   try {
     const paths = await fetchPathsFromSitemap(sitemapPath);

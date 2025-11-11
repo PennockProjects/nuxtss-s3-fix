@@ -8,8 +8,9 @@ import {
   generateKeys,
   checkS3Objects,
 } from './s3CommandUtils';
-import logger from './logger';
+
 import { S3Report } from '../types/S3Report';
+import { S3Layout } from '../types/S3Command';
 
 vi.mock('./logger');
 vi.mock('./awsS3Utils', () => ({
@@ -64,7 +65,12 @@ describe('s3CommandUtils', () => {
 
   describe('initializeReport', () => {
     it('should initialize an S3Report object', () => {
-      const report = initializeReport('s3://bucket', 'region:string', './test./sitemap.xml' );
+      const report = initializeReport({
+        bucketUri: 's3://bucket',
+        bucketUriRegion: 'region:string',
+        sitemapFileLocator: './test./sitemap.xml',
+        isExecute: true,
+      });
       expect(report).toEqual({
         bucketUri: 's3://bucket',
         bucketUriRegion: 'region:string',
@@ -73,23 +79,46 @@ describe('s3CommandUtils', () => {
         pathsExcluded: [],
         keysAll: [],
         keysStatus: {},
-        s3CopyFlats: 0,
-        s3CopyIndexes: 0,
+        isExecute: true,
+        s3PathLayoutNew: S3Layout.UNKNOWN,
         s3CopyCommands: [],
-        s3RemoveFlats: 0,
-        s3RemoveIndexes: 0,
         s3RemoveCommands: [],
         s3CopyCommandsSkipped: [],
-        s3RemoveCommandsSkipped: [],
+        s3RemoveKeysSkipped: [],
+      });
+    });
+
+    it('should initialize an S3Report object with new path layout', () => {
+      const report = initializeReport({
+        bucketUri: 's3://bucket',
+        bucketUriRegion: 'region:string',
+        sitemapFileLocator: './test./sitemap.xml',
+        s3PathLayoutNew: S3Layout.MIXED,
+      });
+      expect(report).toEqual({
+        bucketUri: 's3://bucket',
+        bucketUriRegion: 'region:string',
+        sitemapFileLocator: './test./sitemap.xml',
+        paths: [],
+        pathsExcluded: [],
+        keysAll: [],
+        keysStatus: {},
+        isExecute: false,
+        s3PathLayoutNew: S3Layout.MIXED,
+        s3CopyCommands: [],
+        s3RemoveCommands: [],
+        s3CopyCommandsSkipped: [],
+        s3RemoveKeysSkipped: [],
       });
     });
   });
 
+
   describe('generateKeys', () => {
     it('should generate keys from paths', () => {
-      const report: S3Report = initializeReport('s3://bucket', 's3://bucket', 's3://bucket/sitemap.xml');
+      const report: S3Report = initializeReport({bucketUri: 's3://bucket', bucketUriRegion: 'Antarctica-1', sitemapFileLocator: 's3://bucket/sitemap.xml'});
       generateKeys(['/path1', '/path/to2', '/path3.html', '', '/'], report);
-      expect(report.paths).toEqual(['/path1', '/path/to2', '/path3.html', '/']);
+      expect(report.paths).toEqual(['/path1', '/path/to2']);
       expect(report.keysAll).toEqual([
         'path1',
         'path1.html',
