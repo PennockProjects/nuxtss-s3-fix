@@ -1,5 +1,11 @@
 # @pennockprojects/nuxtss-s3-fix
 
+## 1.0.0
+
+### Major Changes
+
+- f067e2a: Tool now optimizes into SINGLE or DOUBLE optimizations for Nuxt.js static site on AWS S3
+
 ## 0.9.0
 
 ### Minor Changes
